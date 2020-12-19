@@ -16,10 +16,13 @@
 
 package com.example.android.advancedcoroutines
 
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.map
 import com.example.android.advancedcoroutines.util.CacheOnSuccess
 import com.example.android.advancedcoroutines.utils.ComparablePair
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import androidx.lifecycle.liveData as liveDataScope
 
 /**
  * Repository module for handling data operations.
@@ -37,17 +40,31 @@ class PlantRepository private constructor(
 ) {
 
     /**
-     * Fetch a list of [Plant]s from the database.
+     * Fetch a list of [Plant]s from the database and apply a custom sort order to the list.
      * Returns a LiveData-wrapped List of Plants.
      */
-    val plants = plantDao.getPlants()
+    val plants: LiveData<List<Plant>> = liveDataScope<List<Plant>> {
+        // Observe plants from the database (just like a normal LiveData + Room return)
+        val plantsLiveData = plantDao.getPlants()
+
+        // Fetch our custom sort from the network in a main-safe suspending call (cached)
+        val customSortOrder = plantsListSortOrderCache.getOrAwait()
+
+        // Map the LiveData, applying the sort criteria
+        emitSource(plantsLiveData.map { plantList -> plantList.applySort(customSortOrder) })
+    }
 
     /**
-     * Fetch a list of [Plant]s from the database that matches a given [GrowZone].
-     * Returns a LiveData-wrapped List of Plants.
+     * Fetch a list of [Plant]s from the database that matches a given [GrowZone] and apply a
+     * custom sort order to the list. Returns a LiveData-wrapped List of Plants.
      */
-    fun getPlantsWithGrowZone(growZone: GrowZone) =
-        plantDao.getPlantsWithGrowZoneNumber(growZone.number)
+    fun getPlantsWithGrowZone(growZone: GrowZone) = liveDataScope<List<Plant>> {
+        val plantsGrowZoneLiveData = plantDao.getPlantsWithGrowZoneNumber(growZone.number)
+        val customSortOrder = plantsListSortOrderCache.getOrAwait()
+        emitSource(plantsGrowZoneLiveData.map { plantList ->
+            plantList.applySort(customSortOrder)
+        })
+    }
 
     /**
      * Returns true if we should make a network request.

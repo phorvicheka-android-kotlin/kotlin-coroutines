@@ -16,6 +16,8 @@
 
 package com.example.android.advancedcoroutines
 
+import com.example.android.advancedcoroutines.util.CacheOnSuccess
+import com.example.android.advancedcoroutines.utils.ComparablePair
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 
@@ -53,6 +55,24 @@ class PlantRepository private constructor(
     private fun shouldUpdatePlantsCache(): Boolean {
         // suspending function, so you can e.g. check the status of the database here
         return true
+    }
+
+    // Cache for storing the custom sort order
+    private var plantsListSortOrderCache = CacheOnSuccess(onErrorFallback = { listOf<String>() }) {
+        plantService.customPlantSortOrder()
+    }
+    /**
+     * A function that sorts the list of Plants in a given custom order.
+     */
+    private fun List<Plant>.applySort(customSortOrder: List<String>): List<Plant> {
+        // Our product manager requested that these plants always be sorted first in this
+        // order whenever they are present in the array
+        return sortedBy { plant ->
+            val positionForItem = customSortOrder.indexOf(plant.plantId).let { order ->
+                if (order > -1) order else Int.MAX_VALUE
+            }
+            ComparablePair(positionForItem, plant.name)
+        }
     }
 
     /**

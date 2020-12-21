@@ -24,6 +24,10 @@ import com.example.android.advancedcoroutines.util.CacheOnSuccess
 import com.example.android.advancedcoroutines.utils.ComparablePair
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import androidx.lifecycle.liveData as liveDataScope
 
@@ -108,6 +112,23 @@ class PlantRepository private constructor(
             }
             ComparablePair(positionForItem, plant.name)
         }
+    }
+
+    /**
+     * This is a version of [plants] (from above), and represent our observable database using
+     * [flow], which has a similar interface to sequences in Kotlin. This allows us to do async or
+     * suspending transforms of the data.
+     */
+    val plantsFlow: Flow<List<Plant>>
+        get() = plantDao.getPlantsFlow()
+
+    /**
+     * This is a version of [getPlantsWithGrowZoneNumber] (from above), but using [Flow].
+     * It differs from [plantsFlow] in that it only calls *main-safe* suspend functions in the
+     * [map] operator, so it does not need to use [flowOn].
+     */
+    fun getPlantsWithGrowZoneFlow(growZoneNumber: GrowZone): Flow<List<Plant>> {
+        return plantDao.getPlantsWithGrowZoneNumberFlow(growZoneNumber.number)
     }
 
     /**

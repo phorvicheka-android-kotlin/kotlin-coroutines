@@ -21,6 +21,7 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.switchMap
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.asLiveData
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -70,9 +71,17 @@ class PlantListViewModel internal constructor(
         }
     }
 
+    /**
+     * A list of plants that updates based on the current filter (flow version)
+     */
+    val plantsUsingFlow: LiveData<List<Plant>> = plantRepository.plantsFlow.asLiveData()
+
     init {
         // When creating a new ViewModel, clear the grow zone and perform any related udpates
         clearGrowZoneNumber()
+
+        // fetch the full plant list
+        launchDataLoad { plantRepository.tryUpdateRecentPlantsCache() }
     }
 
     /**

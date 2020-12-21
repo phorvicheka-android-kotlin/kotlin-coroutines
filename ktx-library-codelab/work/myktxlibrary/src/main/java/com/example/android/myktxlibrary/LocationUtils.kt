@@ -18,8 +18,13 @@ package com.example.android.myktxlibrary
 
 import android.annotation.SuppressLint
 import android.location.Location
+import android.os.Looper
 import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -45,3 +50,30 @@ suspend fun FusedLocationProviderClient.awaitLastLocation(): Location =
                 continuation.resumeWithException(e)
             }
         }
+
+@SuppressLint("MissingPermission")
+fun FusedLocationProviderClient.locationFlow() = callbackFlow<Location> {
+    // Register a location listener
+    val callback = object : LocationCallback() {
+        override fun onLocationResult(result: LocationResult?) {
+            result ?: return
+            for (location in result.locations) {
+                offer(location) // emit location into the Flow using ProducerScope.offer
+            }
+        }
+    }
+
+    // Emit updates on location changes
+    requestLocationUpdates(
+            createLocationRequest(),
+            callback,
+            Looper.getMainLooper()
+    ).addOnFailureListener { e ->
+        close(e) // in case of exception, close the Flow
+    }
+
+    // Clean up listener when finished
+    awaitClose {
+        removeLocationUpdates(callback) // clean up when Flow collection ends
+    }
+}

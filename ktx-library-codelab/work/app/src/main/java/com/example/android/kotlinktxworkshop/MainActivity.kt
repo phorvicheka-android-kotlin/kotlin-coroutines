@@ -23,25 +23,21 @@ import android.os.Bundle
 import android.os.Looper
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Observer
+import androidx.lifecycle.asLiveData
 import androidx.lifecycle.lifecycleScope
 import com.example.android.myktxlibrary.*
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
     private var listeningToUpdates = false
-
-    private val locationCallback: LocationCallback = object : LocationCallback() {
-        override fun onLocationResult(locationResult: LocationResult?) {
-            if (locationResult != null) {
-                showLocation(R.id.textView, locationResult.lastLocation)
-            }
-        }
-    }
 
     private lateinit var fusedLocationClient: FusedLocationProviderClient
 
@@ -49,6 +45,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        startUpdatingLocation()
     }
 
     override fun onStart() {
@@ -66,7 +63,6 @@ class MainActivity : AppCompatActivity() {
                 Log.d(TAG, "Unable to get location", e)
             }
         }
-        startUpdatingLocation()
     }
 
     @SuppressLint("MissingPermission")
@@ -82,26 +78,17 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("MissingPermission")
     private fun startUpdatingLocation() {
-        fusedLocationClient.requestLocationUpdates(
-            createLocationRequest(),
-            locationCallback,
-            Looper.getMainLooper()
-        ).addOnSuccessListener { listeningToUpdates = true }
-            .addOnFailureListener { e ->
-                findAndSetText(R.id.textView, "Unable to get location.")
-                Log.d(TAG, "Unable to get location", e)
-            }
-    }
-
-    override fun onStop() {
-        super.onStop()
-        if (listeningToUpdates) {
-            stopUpdatingLocation()
-        }
-    }
-
-    private fun stopUpdatingLocation() {
-        fusedLocationClient.removeLocationUpdates(locationCallback)
+        fusedLocationClient.locationFlow()
+                .conflate()
+                .catch { e ->
+                    findAndSetText(R.id.textView, "Unable to get location.")
+                    Log.d(TAG, "Unable to get location", e)
+                }
+                .asLiveData()
+                .observe(this, Observer { location ->
+                    showLocation(R.id.textView, location)
+                    Log.d(TAG, location.toString())
+                })
     }
 
     override fun onRequestPermissionsResult(

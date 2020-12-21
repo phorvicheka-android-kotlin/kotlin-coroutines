@@ -16,12 +16,15 @@
 
 package com.example.android.advancedcoroutines
 
+import androidx.annotation.AnyThread
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.map
+import androidx.lifecycle.switchMap
 import com.example.android.advancedcoroutines.util.CacheOnSuccess
 import com.example.android.advancedcoroutines.utils.ComparablePair
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.lifecycle.liveData as liveDataScope
 
 /**
@@ -58,13 +61,28 @@ class PlantRepository private constructor(
      * Fetch a list of [Plant]s from the database that matches a given [GrowZone] and apply a
      * custom sort order to the list. Returns a LiveData-wrapped List of Plants.
      */
-    fun getPlantsWithGrowZone(growZone: GrowZone) = liveDataScope<List<Plant>> {
-        val plantsGrowZoneLiveData = plantDao.getPlantsWithGrowZoneNumber(growZone.number)
-        val customSortOrder = plantsListSortOrderCache.getOrAwait()
-        emitSource(plantsGrowZoneLiveData.map { plantList ->
-            plantList.applySort(customSortOrder)
-        })
-    }
+    fun getPlantsWithGrowZone(growZone: GrowZone) =  plantDao.getPlantsWithGrowZoneNumber(growZone.number)
+        // Apply switchMap, which "switches" to a new liveData every time a new value is
+        // received
+        .switchMap { plantList ->
+            // Use the liveData builder to construct a new coroutine-backed LiveData
+            liveDataScope<List<Plant>> {
+                val customSortOrder = plantsListSortOrderCache.getOrAwait()
+                // Emit the sorted list to the LiveData builder, which will be the new value
+                // sent to getPlantsWithGrowZoneNumber
+                emit(plantList.applyMainSafeSort(customSortOrder))
+            }
+        }
+
+    /**
+     * The same sorting function as [applySort], but as a suspend function that can run on any thread
+     * (main-safe)
+     */
+    @AnyThread
+    private suspend fun List<Plant>.applyMainSafeSort(customSortOrder: List<String>) =
+        withContext(defaultDispatcher) {
+            this@applyMainSafeSort.applySort(customSortOrder)
+        }
 
     /**
      * Returns true if we should make a network request.

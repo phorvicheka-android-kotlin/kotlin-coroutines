@@ -145,8 +145,31 @@ class PlantRepository private constructor(
      * It differs from [plantsFlow] in that it only calls *main-safe* suspend functions in the
      * [map] operator, so it does not need to use [flowOn].
      */
-    fun getPlantsWithGrowZoneFlow(growZoneNumber: GrowZone): Flow<List<Plant>> {
-        return plantDao.getPlantsWithGrowZoneNumberFlow(growZoneNumber.number)
+    fun getPlantsWithGrowZoneFlow(growZone: GrowZone): Flow<List<Plant>> {
+        // A Flow from Room will return each value, just like a LiveData.
+        return plantDao.getPlantsWithGrowZoneNumberFlow(growZone.number)
+            // When a new value is sent from the database, we can transform it using a
+            // suspending map function. This allows us to call async code like here
+            // where it potentially loads the sort order from network (if not cached)
+            //
+            // Since all calls in this map are main-safe, flowOn is not needed here.
+            // Both Room and Retrofit will run the query on a different thread even though this
+            // flow is using the main thread.
+            .map { plantList ->
+
+                // We can make a request for the cached sort order directly here, because map
+                // takes a suspend lambda
+                //
+                // This may trigger a network request if it's not yet cached, but since the network
+                // call is main safe, we won't block the main thread (even though this flow executes
+                // on Dispatchers.Main).
+                val sortOrderFromNetwork = plantsListSortOrderCache.getOrAwait()
+
+                // The result will be the sorted list with custom sort order applied. Note that this
+                // call is also main-safe due to using applyMainSafeSort.
+                val nextValue = plantList.applyMainSafeSort(sortOrderFromNetwork)
+                nextValue
+            }
     }
 
     /**
